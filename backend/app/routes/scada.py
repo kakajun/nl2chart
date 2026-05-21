@@ -1,70 +1,169 @@
-"""SCADA 数据路由"""
-
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from typing import Optional
 
-from app.db.tdengine import get_td_client
-from app.models.scada import Alert, ChartData, QueryRequest, StationMetrics
+import sqlite3
+from datetime import datetime, timedelta
+from pathlib import Path
+
+from app.db.point_map import MODEL_POINT_MAP
 
 router = APIRouter(prefix="/api/scada", tags=["scada"])
+
+DB_PATH = Path(__file__).parent.parent / "db" / "mock_scada.db"
+
+
+def get_db():
+    return sqlite3.connect(DB_PATH)
 
 
 @router.get("/stations", summary="获取电站列表")
 async def list_stations():
-    with get_td_client() as db:
-        rows = db.query(
-            "SELECT DISTINCT station_id FROM device_data LIMIT 100"
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT station_code FROM scada_data")
+    rows = c.fetchall()
+    conn.close()
+    return {"stations": [r[0] for r in rows]}
+
+
+@router.get("/metrics/{station_code}", summary="电站实时指标")
+async def station_metrics(station_code: str):
+    conn = get_db()
+    c = conn.cursor()
+
+    # 获取最新数据
+    c.execute("""
+        SELECT equ_code, point_code, point_name, value
+        FROM scada_data
+        WHERE station_code = ? AND ts = (
+            SELECT MAX(ts) FROM scada_data WHERE station_code = ?
         )
-        return {"stations": [r["station_id"] for r in rows]}
+    """, (station_code, station_code))
+    rows = c.fetchall()
+    conn.close()
+
+    if not rows:
+        raise HTTPException(status_code=404, detail="Station not found")
+
+    # 按测点类型分组
+    metrics = {}
+    for equ_code, pcode, pname, val in rows:
+        if "辐射" in pname and "平均" not in pname and "累计" not in pname:
+            metrics["irradiance"] = val
+        elif "环温" in pname or "温度" in pname:
+            metrics["temperature"] = val
+        elif "风速" in pname and "平均" not in pname:
+            metrics["wind_speed"] = val
+        elif "环湿" in pname or "湿度" in pname:
+            metrics["humidity"] = val
+        elif "功率" in pname and "有功" in pname:
+            metrics["power_kw"] = val
+
+    return {"station_code": station_code, **metrics}
 
 
-@router.get("/metrics/{station_id}", summary="电站实时指标")
-async def station_metrics(station_id: str):
-    with get_td_client() as db:
-        sql = f"""SELECT LAST(power_kw) as power_kw,
-                          LAST(irradiance) as irradiance,
-                          LAST(wind_speed) as wind_speed,
-                          LAST(temperature) as temperature,
-                          LAST(humidity) as humidity
-                   FROM device_data
-                   WHERE station_id = '{station_id}'"""
-        rows = db.query(sql)
-        if not rows:
-            raise HTTPException(status_code=404, detail="Station not found")
-        return {"station_id": station_id, **rows[0]}
-
-
-@router.get("/history/{station_id}", summary="历史趋势数据")
+@router.get("/history/{station_code}", summary="历史趋势数据")
 async def history_data(
-    station_id: str,
-    metric: str = "power_kw",
+    station_code: str,
+    metric: str = "irradiance",
     hours: int = 24,
-    interval: str = "1h",
 ):
-    with get_td_client() as db:
-        sql = f"""SELECT _iwt as ts, AVG({metric}) as val
-                   FROM device_data
-                   WHERE station_id = '{station_id}'
-                     AND ts >= NOW() - {hours}h
-                   INTERVAL({interval})"""
-        rows = db.query(sql)
-        labels = [str(r["ts"]) for r in rows]
-        values = [r["val"] for r in rows]
-        return ChartData(
-            title=f"{station_id} — {metric} ({hours}h)",
-            chart_type="line",
-            labels=labels,
-            datasets=[{"label": metric, "data": values}],
-            sql=sql,
-        )
+    conn = get_db()
+    c = conn.cursor()
+
+    # 查找对应测点
+    point_keyword = {
+        "irradiance": "辐射",
+        "temperature": "环温",
+        "wind_speed": "风速",
+        "humidity": "湿",
+        "power_kw": "有功功率",
+    }.get(metric, metric)
+
+    c.execute("""
+        SELECT ts, AVG(value) as val
+        FROM scada_data
+        WHERE station_code = ? AND point_name LIKE ?
+          AND ts >= datetime('now', '-{} hours')
+        GROUP BY strftime('%Y-%m-%d %H:%M', ts)
+        ORDER BY ts
+    """.format(hours), (station_code, f"%{point_keyword}%"))
+
+    rows = c.fetchall()
+    conn.close()
+
+    labels = [r[0] for r in rows]
+    values = [r[1] for r in rows]
+
+    return {
+        "title": f"{station_code} — {metric} ({hours}h)",
+        "chart_type": "line",
+        "labels": labels,
+        "datasets": [{"label": metric, "data": values}],
+    }
 
 
 @router.get("/alerts", summary="告警列表")
-async def list_alerts(station_id: str | None = None, limit: int = 50):
-    where = f"WHERE station_id = '{station_id}'" if station_id else ""
-    with get_td_client() as db:
-        sql = f"SELECT * FROM alerts {where} ORDER BY ts DESC LIMIT {limit}"
-        rows = db.query(sql)
-        return {"alerts": rows}
+async def list_alerts(station_code: Optional[str] = None, limit: int = 50):
+    conn = get_db()
+    c = conn.cursor()
+
+    if station_code:
+        c.execute(
+            "SELECT * FROM alerts WHERE station_code = ? ORDER BY ts DESC LIMIT ?",
+            (station_code, limit),
+        )
+    else:
+        c.execute("SELECT * FROM alerts ORDER BY ts DESC LIMIT ?", (limit,))
+
+    rows = c.fetchall()
+    conn.close()
+
+    alerts = []
+    for row in rows:
+        alerts.append({
+            "id": row[0],
+            "ts": row[1],
+            "station_code": row[2],
+            "equ_code": row[3],
+            "alert_type": row[4],
+            "level": row[5],
+            "message": row[6],
+            "resolved": row[7],
+        })
+
+    return {"alerts": alerts}
+
+
+@router.get("/points/{station_code}", summary="获取电站测点列表")
+async def list_points(station_code: str):
+    """返回电站下所有设备的测点映射"""
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""
+        SELECT DISTINCT equ_code, equ_model, equ_type
+        FROM scada_data
+        WHERE station_code = ?
+    """, (station_code,))
+    rows = c.fetchall()
+    conn.close()
+
+    result = []
+    for equ_code, equ_model, equ_type in rows:
+        points = MODEL_POINT_MAP.get(equ_model, {})
+        result.append({
+            "equ_code": equ_code,
+            "equ_model": equ_model,
+            "equ_type": equ_type,
+            "points": [{"code": k, "name": v} for k, v in points.items()],
+        })
+
+    return {"station_code": station_code, "devices": result}
+
+
+class QueryRequest(BaseModel):
+    question: str
 
 
 @router.post("/query", summary="自然语言查询")

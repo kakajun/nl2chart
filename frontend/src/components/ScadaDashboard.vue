@@ -43,8 +43,8 @@
         </thead>
         <tbody>
           <tr v-for="alert in alerts" :key="alert.id" :class="alert.level">
-            <td>{{ alert.timestamp }}</td>
-            <td>{{ alert.station_id }}</td>
+            <td>{{ alert.ts }}</td>
+            <td>{{ alert.station_code }}</td>
             <td>{{ alert.alert_type }}</td>
             <td>
               <span class="badge" :class="alert.level">{{ alert.level }}</span>
@@ -115,9 +115,9 @@ const envOption = ref({
   ],
 });
 
-async function fetchMetrics(stationId = "station_01") {
+async function fetchMetrics(stationCode = "hbz") {
   try {
-    const res = await fetch(`${API_BASE}/api/scada/metrics/${stationId}`);
+    const res = await fetch(`${API_BASE}/api/scada/metrics/${stationCode}`);
     const data = await res.json();
     metrics.value[0].value = data.power_kw?.toFixed(1) ?? "--";
     metrics.value[1].value = data.irradiance?.toFixed(1) ?? "--";
@@ -129,17 +129,17 @@ async function fetchMetrics(stationId = "station_01") {
   }
 }
 
-async function fetchHistory(stationId = "station_01") {
+async function fetchHistory(stationCode = "hbz") {
   try {
     const res = await fetch(
-      `${API_BASE}/api/scada/history/${stationId}?metric=power_kw&hours=24&interval=1h`,
+      `${API_BASE}/api/scada/history/${stationCode}?metric=power_kw&hours=24`,
     );
     const data = await res.json();
     powerOption.value.xAxis.data = data.labels;
     powerOption.value.series[0].data = data.datasets[0].data;
 
     const envRes = await fetch(
-      `${API_BASE}/api/scada/history/${stationId}?metric=irradiance&hours=24&interval=1h`,
+      `${API_BASE}/api/scada/history/${stationCode}?metric=irradiance&hours=24`,
     );
     const envData = await envRes.json();
     envOption.value.xAxis.data = envData.labels;
@@ -160,11 +160,11 @@ async function fetchAlerts() {
 }
 
 onMounted(() => {
-  fetchMetrics();
-  fetchHistory();
+  fetchMetrics("hbz");
+  fetchHistory("hbz");
   fetchAlerts();
   setInterval(() => {
-    fetchMetrics();
+    fetchMetrics("hbz");
     fetchAlerts();
   }, 10000);
 });

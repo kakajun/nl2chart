@@ -38,3 +38,4 @@ lerna-debug.log*
 
 # Oxlint / oxfmt
 .oxlint-cache/
+*.db
