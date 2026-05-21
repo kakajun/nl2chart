@@ -1,0 +1,94 @@
+{
+  "station_code": "HBZ",
+  "station_name": "河北张北光伏电站",
+  "categories": [
+    {
+      "id": "env",
+      "name": "环境监测",
+      "icon": "sun",
+      "points": [
+        {"code": "a", "name": "总辐射1", "unit": "W/m²", "type": "irradiance"},
+        {"code": "b", "name": "散辐射", "unit": "W/m²", "type": "irradiance"},
+        {"code": "c", "name": "直辐射", "unit": "W/m²", "type": "irradiance"},
+        {"code": "d", "name": "总辐射2", "unit": "W/m²", "type": "irradiance"},
+        {"code": "e", "name": "环温", "unit": "°C", "type": "temperature"},
+        {"code": "f", "name": "环湿", "unit": "%", "type": "humidity"},
+        {"code": "g", "name": "风向", "unit": "°", "type": "direction"},
+        {"code": "h", "name": "风速", "unit": "m/s", "type": "speed"},
+        {"code": "i", "name": "气压", "unit": "hPa", "type": "pressure"},
+        {"code": "j", "name": "温度1", "unit": "°C", "type": "temperature"},
+        {"code": "k", "name": "温度2", "unit": "°C", "type": "temperature"},
+        {"code": "l", "name": "温度3", "unit": "°C", "type": "temperature"},
+        {"code": "m", "name": "温度4", "unit": "°C", "type": "temperature"},
+        {"code": "n", "name": "总辐射1平均", "unit": "W/m²", "type": "irradiance"},
+        {"code": "o", "name": "散辐射平均", "unit": "W/m²", "type": "irradiance"},
+        {"code": "p", "name": "直辐射平均", "unit": "W/m²", "type": "irradiance"},
+        {"code": "q", "name": "总辐射2平均", "unit": "W/m²", "type": "irradiance"},
+        {"code": "r", "name": "环温平均", "unit": "°C", "type": "temperature"},
+        {"code": "s", "name": "环湿平均", "unit": "%", "type": "humidity"},
+        {"code": "t", "name": "风向平均", "unit": "°", "type": "direction"},
+        {"code": "u", "name": "风速平均", "unit": "m/s", "type": "speed"},
+        {"code": "v", "name": "风速平均(10分钟)", "unit": "m/s", "type": "speed"},
+        {"code": "w", "name": "气压平均", "unit": "hPa", "type": "pressure"},
+        {"code": "x", "name": "温度1平均", "unit": "°C", "type": "temperature"},
+        {"code": "y", "name": "温度2平均", "unit": "°C", "type": "temperature"},
+        {"code": "z", "name": "温度3平均", "unit": "°C", "type": "temperature"},
+        {"code": "aa", "name": "温度4平均", "unit": "°C", "type": "temperature"},
+        {"code": "ab", "name": "露点", "unit": "°C", "type": "temperature"},
+        {"code": "ac", "name": "总辐射1间隔累计", "unit": "Wh/m²", "type": "energy"},
+        {"code": "ad", "name": "散辐射间隔累计", "unit": "Wh/m²", "type": "energy"},
+        {"code": "ae", "name": "直辐射间隔累计", "unit": "Wh/m²", "type": "energy"},
+        {"code": "af", "name": "总辐射2间隔累计", "unit": "Wh/m²", "type": "energy"},
+        {"code": "ag", "name": "日照间隔累计", "unit": "h", "type": "time"},
+        {"code": "ah", "name": "总辐射1日累计", "unit": "Wh/m²", "type": "energy"},
+        {"code": "ai", "name": "散辐射日累计", "unit": "Wh/m²", "type": "energy"},
+        {"code": "aj", "name": "直辐射日累计", "unit": "Wh/m²", "type": "energy"},
+        {"code": "ak", "name": "总辐射2日累计", "unit": "Wh/m²", "type": "energy"},
+        {"code": "al", "name": "日照时", "unit": "h", "type": "time"},
+        {"code": "am", "name": "电量", "unit": "kWh", "type": "energy"}
+      ]
+    },
+    {
+      "id": "power_quality",
+      "name": "电能质量",
+      "icon": "zap",
+      "points": [
+        {"code": "wo", "name": "110kV主表正向有功总电度", "unit": "kWh", "type": "energy"},
+        {"code": "wp", "name": "110kV主表反向有功总电度", "unit": "kWh", "type": "energy"},
+        {"code": "wq", "name": "110kV主表正向无功总电度", "unit": "kvarh", "type": "energy"},
+        {"code": "wr", "name": "110kV主表反向无功总电度", "unit": "kvarh", "type": "energy"}
+      ]
+    },
+    {
+      "id": "dc_system",
+      "name": "直流系统",
+      "icon": "battery",
+      "points": []
+    },
+    {
+      "id": "protection",
+      "name": "保护测控",
+      "icon": "shield",
+      "points": []
+    },
+    {
+      "id": "inverter",
+      "name": "逆变器",
+      "icon": "cpu",
+      "points": []
+    },
+    {
+      "id": "collector",
+      "name": "集电线",
+      "icon": "git-branch",
+      "points": []
+    }
+  ],
+  "kpi_mapping": {
+    "irradiance": {"codes": ["a", "d"], "aggregation": "avg", "label": "辐照度"},
+    "temperature": {"codes": ["e"], "aggregation": "avg", "label": "环境温度"},
+    "wind_speed": {"codes": ["h", "v"], "aggregation": "avg", "label": "风速"},
+    "humidity": {"codes": ["f"], "aggregation": "avg", "label": "湿度"},
+    "power_total": {"codes": ["wo"], "aggregation": "max", "label": "有功电度"}
+  }
+}
