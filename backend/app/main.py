@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.routes.scada import router as scada_router
+
 app = FastAPI(title="NL2Chart API", version="0.1.0")
 
 app.add_middleware(
@@ -10,6 +12,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(scada_router)
 
 @app.get("/")
 async def root():
