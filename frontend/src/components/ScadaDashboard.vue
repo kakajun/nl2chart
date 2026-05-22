@@ -186,24 +186,24 @@ const correlationOption = ref({
 });
 
 function getUnit(name) {
-  if ("辐射" in name) return "W/m²";
-  if ("温度" in name) return "°C";
-  if ("湿度" in name) return "%";
-  if ("风速" in name) return "m/s";
-  if ("风向" in name) return "°";
-  if ("气压" in name) return "hPa";
-  if ("电压" in name) return "V";
-  if ("电流" in name) return "A";
-  if ("功率" in name) return "kW";
-  if ("电度" in name) return "kWh";
+  if (name.includes("辐射")) return "W/m²";
+  if (name.includes("温度")) return "°C";
+  if (name.includes("湿度")) return "%";
+  if (name.includes("风速")) return "m/s";
+  if (name.includes("风向")) return "°";
+  if (name.includes("气压")) return "hPa";
+  if (name.includes("电压")) return "V";
+  if (name.includes("电流")) return "A";
+  if (name.includes("功率")) return "kW";
+  if (name.includes("电度")) return "kWh";
   return "";
 }
 
 function getValueColor(pt) {
   const name = pt.point_name || "";
-  if ("辐射" in name) return "#ffb800";
-  if ("温度" in name) return "#ff6b6b";
-  if ("功率" in name || "电度" in name) return "#00d26a";
+  if (name.includes("辐射")) return "#ffb800";
+  if (name.includes("温度")) return "#ff6b6b";
+  if (name.includes("功率") || name.includes("电度")) return "#00d26a";
   return "#e0e6ed";
 }
 
