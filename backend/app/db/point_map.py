@@ -31,6 +31,14 @@ def parse_sql_file(filepath: str) -> dict:
 # 完整映射表
 MODEL_POINT_MAP = parse_sql_file("/root/.openclaw/workspace/nl2chart/hbz_yc.sql")
 
+# 去掉测点名称中的 _1/_2 后缀（统一为通用名称）
+for model, points in MODEL_POINT_MAP.items():
+    for code in list(points.keys()):
+        name = points[code]
+        # 去掉 _1, _2, _3... 后缀
+        clean_name = re.sub(r'_\d+$', '', name)
+        points[code] = clean_name
+
 # 设备模型描述
 MODEL_DESC = {
     "dq": "环境监测仪",

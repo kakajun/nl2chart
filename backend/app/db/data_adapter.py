@@ -21,9 +21,31 @@ class DataAdapter:
         self._td_client = None
         self._td_available = None  # None=未检测, True=可用, False=不可用
         self._mock_conn = None
+        # 按设备模型分别存储测点映射
+        self._model_maps = MODEL_POINT_MAP
+        # 默认通用映射（many1.x 优先，dq补充）
         self._point_map = {}
         for model, points in MODEL_POINT_MAP.items():
-            self._point_map.update(points)
+            if model.startswith('many'):
+                self._point_map.update(points)
+        # dq模型补充不重叠的编码
+        for code, name in MODEL_POINT_MAP.get('dq', {}).items():
+            if code not in self._point_map:
+                self._point_map[code] = name
+
+    def _get_point_name(self, equ_code: str, pcode: str) -> str:
+        """根据设备编码和测点编码返回正确的测点名称"""
+        # 去掉 HBZ_ 前缀
+        if equ_code.startswith('HBZ_'):
+            equ_code = equ_code[4:]
+        # HJ01 = 环境监测仪 → dq模型
+        if equ_code == 'HJ01':
+            return MODEL_POINT_MAP.get('dq', {}).get(pcode, self._point_map.get(pcode, pcode))
+        # F1/F2/F3 = 箱变测控 → many1.0模型
+        if equ_code in ('F1', 'F2', 'F3'):
+            return MODEL_POINT_MAP.get('many1.0', {}).get(pcode, self._point_map.get(pcode, pcode))
+        # 默认使用通用映射
+        return self._point_map.get(pcode, pcode)
 
     @property
     def td_available(self) -> bool:
@@ -96,9 +118,9 @@ class DataAdapter:
         latest_points = []
         for row in latest_rows:
             pcode = row.get("point_code", "")
-            pname = self._point_map.get(pcode, pcode)
-            val = row.get("value", 0)
             equ_code = row.get("equ_code", station_code)
+            pname = self._get_point_name(equ_code, pcode)
+            val = row.get("value", 0)
             latest_points.append({
                 "equ_code": equ_code,
                 "point_code": pcode,
@@ -215,6 +237,22 @@ class DataAdapter:
         for name, values in series_map.items():
             series.append({
                 "name": name,
+                "data": [values.get(l, None) for l in sorted_labels],
+            })
+
+        # 构建equ_code到pcode的映射用于名称解析
+        equ_code_map = {}
+        for row in data:
+            pcode = row.get("point_code", "")
+            equ_code = row.get("equ_code", station_code)
+            equ_code_map[pcode] = equ_code
+
+        series = []
+        for pcode, values in series_map.items():
+            equ_code = equ_code_map.get(pcode, station_code)
+            pname = self._get_point_name(equ_code, pcode)
+            series.append({
+                "name": pname,
                 "data": [values.get(l, None) for l in sorted_labels],
             })
 
