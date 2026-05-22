@@ -11,6 +11,7 @@ from pathlib import Path
 from collections import defaultdict
 
 from app.db.point_map import MODEL_POINT_MAP
+from app.db.data_adapter import get_adapter, check_tdengine
 
 router = APIRouter(prefix="/api/scada", tags=["scada"])
 
@@ -28,6 +29,20 @@ def get_db():
     return sqlite3.connect(DB_PATH)
 
 
+@router.get("/status", summary="数据源状态")
+async def data_status():
+    td_status = check_tdengine()
+    adapter = get_adapter()
+    return {
+        "tdengine": {
+            "connected": td_status["connected"],
+            "host": td_status.get("host", "unknown"),
+        },
+        "data_source": "tdengine" if adapter.td_available else "mock",
+        "message": "使用真实数据" if adapter.td_available else "使用模拟数据（TDengine 未连接）",
+    }
+
+
 @router.get("/stations", summary="获取电站列表")
 async def list_stations():
     conn = get_db()
@@ -40,50 +55,11 @@ async def list_stations():
 
 @router.get("/metrics/{station_code}", summary="电站实时指标")
 async def station_metrics(station_code: str):
-    conn = get_db()
-    c = conn.cursor()
-
-    # 获取最新数据
-    c.execute("""
-        SELECT equ_code, point_code, point_name, value
-        FROM scada_data
-        WHERE station_code = ? AND ts = (
-            SELECT MAX(ts) FROM scada_data WHERE station_code = ?
-        )
-    """, (station_code, station_code))
-    rows = c.fetchall()
-    conn.close()
-
-    if not rows:
+    adapter = get_adapter()
+    data = adapter.get_latest(station_code)
+    if not data or not data.get("latest_points"):
         raise HTTPException(status_code=404, detail="Station not found")
-
-    # 按测点类型分组
-    metrics = {}
-    latest_points = []
-    
-    for equ_code, pcode, pname, val in rows:
-        latest_points.append({
-            "equ_code": equ_code,
-            "point_code": pcode,
-            "point_name": pname,
-            "value": val,
-        })
-        if "辐射" in pname and "平均" not in pname and "累计" not in pname:
-            metrics["irradiance"] = val
-        elif "环温" in pname or "温度" in pname:
-            metrics["temperature"] = val
-        elif "风速" in pname and "平均" not in pname:
-            metrics["wind_speed"] = val
-        elif "环湿" in pname or "湿度" in pname:
-            metrics["humidity"] = val
-        elif "功率" in pname and "有功" in pname:
-            metrics["power_kw"] = val
-
-    return {
-        "station_code": station_code,
-        "latest_points": latest_points[:50],
-        **metrics,
-    }
+    return data
 
 
 @router.get("/history/{station_code}", summary="历史趋势数据")
@@ -94,92 +70,11 @@ async def history_data(
     points: str = None,
     range: str = "24h",
 ):
-    conn = get_db()
-    c = conn.cursor()
-
-    # 解析时间范围
-    if range.endswith("h"):
-        hours = int(range[:-1])
-        time_sql = f"ts >= datetime('now', '-{hours} hours')"
-    elif range.endswith("d"):
-        days = int(range[:-1])
-        time_sql = f"ts >= datetime('now', '-{days} days')"
-    else:
-        time_sql = f"ts >= datetime('now', '-24 hours')"
-
-    # 如果传了points参数，按points查询
+    adapter = get_adapter()
+    point_codes = None
     if points:
         point_codes = [p.strip() for p in points.split(",")]
-        placeholders = ",".join(["?"] * len(point_codes))
-        
-        # 获取测点名称
-        c.execute(f"""
-            SELECT DISTINCT point_code, point_name
-            FROM scada_data
-            WHERE station_code = ? AND point_code IN ({placeholders})
-        """, (station_code, *point_codes))
-        name_map = {r[0]: r[1] for r in c.fetchall()}
-        
-        # 查询每个测点的数据
-        all_series = []
-        labels = []
-        
-        for pcode in point_codes:
-            c.execute(f"""
-                SELECT ts, value
-                FROM scada_data
-                WHERE station_code = ? AND point_code = ? AND {time_sql}
-                ORDER BY ts
-            """, (station_code, pcode))
-            rows = c.fetchall()
-            
-            if rows:
-                if not labels:
-                    labels = [r[0] for r in rows]
-                values = [r[1] for r in rows]
-                all_series.append({
-                    "name": name_map.get(pcode, pcode),
-                    "data": values,
-                })
-        
-        conn.close()
-        return {
-            "title": f"{station_code} 趋势",
-            "labels": labels,
-            "series": all_series,
-        }
-
-    # 否则按metric关键词查询
-    point_keyword = {
-        "irradiance": "辐射",
-        "temperature": "环温",
-        "wind_speed": "风速",
-        "humidity": "湿",
-        "power_kw": "有功功率",
-    }.get(metric, metric)
-
-    c.execute(f"""
-        SELECT ts, AVG(value) as val
-        FROM scada_data
-        WHERE station_code = ? AND point_name LIKE ?
-          AND {time_sql}
-        GROUP BY strftime('%Y-%m-%d %H:%M', ts)
-        ORDER BY ts
-    """, (station_code, f"%{point_keyword}%"))
-
-    rows = c.fetchall()
-    conn.close()
-
-    labels = [r[0] for r in rows]
-    values = [r[1] for r in rows]
-
-    return {
-        "title": f"{station_code} — {metric}",
-        "chart_type": "line",
-        "labels": labels,
-        "datasets": [{"label": metric, "data": values}],
-        "series": [{"name": metric, "data": values}],
-    }
+    return adapter.get_history(station_code, metric=metric, point_codes=point_codes, hours=hours, range_str=range)
 
 
 @router.get("/alerts", summary="告警列表")
