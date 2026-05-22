@@ -41,8 +41,73 @@ MODEL_DESC = {
     "many1.4": "箱变测控",
 }
 
-# 默认使用 dq 模型的映射作为通用映射
-POINT_MAP = MODEL_POINT_MAP.get("dq", {})
+# 合并所有模型的测点映射（many1.x 优先，dq 最后覆盖环境监测部分）
+POINT_MAP = {}
+# 先加载 many1.x 模型（箱变/逆变器测点）
+for model, points in MODEL_POINT_MAP.items():
+    if model.startswith('many'):
+        POINT_MAP.update(points)
+# 再加载 dq 模型（环境监测测点），但只覆盖 a~am 范围内的编码
+env_codes = set()
+for code in list('abcdefghijklmnopqrstuvwxyz') + ['aa','ab','ac','ad','ae','af','ag','ah','ai','aj','ak','al','am']:
+    env_codes.add(code)
+for code, name in MODEL_POINT_MAP.get("dq", {}).items():
+    if code in env_codes:
+        POINT_MAP[code] = name
+    elif code not in POINT_MAP:
+        POINT_MAP[code] = name
+
+# 如果从 hbz_yc.sql 没有解析到 many1.0 的测点，从 hbz_config.sql 补充
+if not any(k.startswith('many') for k in MODEL_POINT_MAP.keys()):
+    import re
+    def parse_hbz_config(filepath):
+        inv_points = {}
+        with open(filepath, "r", encoding="utf-8") as f:
+            for line in f:
+                if not line.startswith("INSERT INTO"):
+                    continue
+                vals_match = re.search(r'VALUES \((.*)\);', line)
+                if not vals_match:
+                    continue
+                vals = vals_match.group(1)
+                parts = []
+                current = ''
+                in_quote = False
+                for c in vals:
+                    if c == "'":
+                        in_quote = not in_quote
+                        current += c
+                    elif c == ',' and not in_quote:
+                        parts.append(current.strip())
+                        current = ''
+                    else:
+                        current += c
+                if current:
+                    parts.append(current.strip())
+                
+                if len(parts) < 40:
+                    continue
+                
+                model = parts[1].strip("'") if len(parts) > 1 else ''
+                cdbh = parts[2].strip("'") if len(parts) > 2 else ''
+                cdmc = parts[3].strip("'") if len(parts) > 3 else ''
+                dtype = parts[16].strip("'") if len(parts) > 16 else ''
+                sbbh = parts[38].strip("'") if len(parts) > 38 else ''
+                
+                if sbbh == 'NULL':
+                    sbbh = ''
+                
+                if model.startswith('many') and cdbh and cdmc:
+                    base_name = re.sub(r'_\d+$', '', cdmc)
+                    inv_points[cdbh.lower()] = base_name
+        return inv_points
+    
+    config_points = parse_hbz_config("/root/.openclaw/workspace/nl2chart/hbz_config.sql")
+    POINT_MAP.update(config_points)
+
+# dq 环境监测测点最后更新（确保环境监测仪测点正确）
+for code, name in MODEL_POINT_MAP.get("dq", {}).items():
+    POINT_MAP[code] = name
 
 if __name__ == "__main__":
     print(f"解析到 {sum(len(v) for v in MODEL_POINT_MAP.values())} 个测点映射")
