@@ -107,7 +107,7 @@ use([
   ToolboxComponent,
 ]);
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+const API_BASE = import.meta.env.VITE_API_BASE || "";
 
 const connected = ref(false);
 const timeRange = ref("24h");
