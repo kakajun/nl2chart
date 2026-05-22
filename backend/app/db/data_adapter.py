@@ -31,10 +31,8 @@ class DataAdapter:
             status = check_tdengine()
             self._td_available = status["connected"]
             if self._td_available and self._td_client is None:
-                self._td_client = TDEngineClient(use_zt=True)
-                if not self._td_client.connect():
-                    self._td_client = TDEngineClient(use_zt=False)
-                    self._td_client.connect()
+                self._td_client = TDEngineClient()
+                self._td_client.connect()
         return self._td_available
 
     def _get_mock_conn(self):
@@ -80,9 +78,9 @@ class DataAdapter:
         if not self._td_client:
             return {}
 
-        # 查询 hbz_yc 表最新一条
+        # 查询超级表最新数据
         data = self._td_client.query_station_data(
-            table_name="hbz_yc",
+            table_name="stable_es_station_pjygcdz_equ",
             start_time=datetime.now() - timedelta(hours=1),
             end_time=datetime.now(),
         )
@@ -100,22 +98,23 @@ class DataAdapter:
             pcode = row.get("point_code", "")
             pname = self._point_map.get(pcode, pcode)
             val = row.get("value", 0)
+            equ_code = row.get("equ_code", station_code)
             latest_points.append({
-                "equ_code": row.get("equ_code", station_code),
+                "equ_code": equ_code,
                 "point_code": pcode,
                 "point_name": pname,
                 "value": val,
             })
-            if "辐射" in pname and "平均" not in pname and "累计" not in pname:
-                metrics["irradiance"] = val
-            elif "环温" in pname or "温度" in pname:
-                metrics["temperature"] = val
-            elif "风速" in pname and "平均" not in pname:
-                metrics["wind_speed"] = val
-            elif "环湿" in pname or "湿度" in pname:
-                metrics["humidity"] = val
-            elif "功率" in pname and "有功" in pname:
-                metrics["power_kw"] = val
+            # 只取环境监测仪(HJ01)的数据作为KPI
+            if equ_code == "HJ01":
+                if "辐射" in pname and "平均" not in pname and "累计" not in pname:
+                    metrics["irradiance"] = val
+                elif "环温" in pname or ("温度" in pname and "平均" not in pname):
+                    metrics["temperature"] = val
+                elif "风速" in pname and "平均" not in pname:
+                    metrics["wind_speed"] = val
+                elif "环湿" in pname or ("湿度" in pname and "平均" not in pname):
+                    metrics["humidity"] = val
 
         return {
             "station_code": station_code,
@@ -188,7 +187,7 @@ class DataAdapter:
         end = datetime.now()
 
         data = self._td_client.query_station_data(
-            table_name="hbz_yc",
+            table_name="stable_es_station_pjygcdz_equ",
             start_time=start,
             end_time=end,
             point_codes=point_codes,

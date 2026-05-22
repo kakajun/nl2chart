@@ -6,27 +6,23 @@ from typing import List, Dict, Optional
 import os
 
 # TDengine 连接配置
-TD_HOST = os.getenv("TD_HOST", "192.168.0.250")
+TD_HOST = os.getenv("TD_HOST", "10.204.252.13")  # ZeroTier IP 直连
 TD_PORT = os.getenv("TD_PORT", "6041")
 TD_DB = os.getenv("TD_DB", "station_data")
 TD_USER = os.getenv("TD_USER", "root")
 TD_PASS = os.getenv("TD_PASS", "taosdata")
 
-# 备用: ZeroTier 地址
-TD_HOST_ZT = os.getenv("TD_HOST_ZT", "10.204.252.13")
-
 CONNECTION_STRING = f"taosws://{TD_HOST}:{TD_PORT}/{TD_DB}"
-CONNECTION_STRING_ZT = f"taosws://{TD_HOST_ZT}:{TD_PORT}/{TD_DB}"
 
 
 class TDEngineClient:
     """TDengine 客户端 — 连接电站 SCADA 数据库"""
 
-    def __init__(self, use_zt: bool = False):
+    def __init__(self):
         self.conn = None
         self.cursor = None
         self.connected = False
-        self.conn_str = CONNECTION_STRING_ZT if use_zt else CONNECTION_STRING
+        self.conn_str = CONNECTION_STRING
 
     def connect(self) -> bool:
         """建立连接"""
@@ -127,7 +123,7 @@ class TDEngineClient:
             end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
 
             self.cursor.execute(f"""
-                SELECT {cols} FROM {table_name}
+                SELECT {cols} FROM `{table_name}`
                 WHERE ts >= '{start_str}' AND ts <= '{end_str}'
                 ORDER BY ts
             """)
@@ -143,7 +139,7 @@ class TDEngineClient:
 
     def query_station_data(
         self,
-        table_name: str = "hbz_yc",
+        table_name: str = "stable_es_station_pjygcdz_equ",
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
         point_codes: Optional[List[str]] = None,
@@ -175,7 +171,7 @@ class TDEngineClient:
             if not point_cols:
                 return []
 
-            cols_sql = ", ".join(["ts", "equ_code"] + point_cols)
+            cols_sql = ", ".join(["`ts`", "`equ_code`"] + [f"`{c}`" for c in point_cols])
 
             # 构建 WHERE
             where_parts = []
@@ -186,7 +182,7 @@ class TDEngineClient:
 
             where_sql = " AND ".join(where_parts) if where_parts else "1=1"
 
-            sql = f"SELECT {cols_sql} FROM {table_name} WHERE {where_sql} ORDER BY ts"
+            sql = f"SELECT {cols_sql} FROM `{table_name}` WHERE {where_sql} ORDER BY ts"
             self.cursor.execute(sql)
             rows = self.cursor.fetchall()
 
@@ -220,28 +216,24 @@ class TDEngineClient:
 _td_client: Optional[TDEngineClient] = None
 
 
-def get_td_client(use_zt: bool = False) -> TDEngineClient:
+def get_td_client() -> TDEngineClient:
     """获取 TDengine 客户端实例（单例）"""
     global _td_client
     if _td_client is None:
-        _td_client = TDEngineClient(use_zt=use_zt)
+        _td_client = TDEngineClient()
     return _td_client
 
 
 def check_tdengine() -> Dict:
     """检查 TDengine 连接状态"""
-    client = get_td_client(use_zt=True)  # 优先尝试 ZeroTier 地址
+    client = get_td_client()
     ok = client.test()
-    if not ok:
-        # 回退到原始地址
-        client = get_td_client(use_zt=False)
-        ok = client.test()
 
     if ok:
         tables = client.list_tables()
         return {
             "connected": True,
-            "host": TD_HOST_ZT if client.conn_str == CONNECTION_STRING_ZT else TD_HOST,
+            "host": TD_HOST,
             "database": TD_DB,
             "tables": tables[:20],  # 只返回前20个表
             "table_count": len(tables),
