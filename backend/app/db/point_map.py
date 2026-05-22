@@ -3,8 +3,12 @@
 运行: python point_map.py
 """
 
+import os
 import re
 from collections import defaultdict
+
+# 项目根目录（backend/app/db/point_map.py → 向上3层到项目根）
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 
 def parse_sql_file(filepath: str) -> dict:
@@ -29,7 +33,8 @@ def parse_sql_file(filepath: str) -> dict:
 
 
 # 完整映射表
-MODEL_POINT_MAP = parse_sql_file("/root/.openclaw/workspace/nl2chart/hbz_yc.sql")
+YC_SQL_PATH = os.path.join(PROJECT_ROOT, "hbz_yc.sql")
+MODEL_POINT_MAP = parse_sql_file(YC_SQL_PATH)
 
 # 去掉测点名称中的 _1/_2 后缀（统一为通用名称）
 for model, points in MODEL_POINT_MAP.items():
